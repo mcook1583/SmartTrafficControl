@@ -40,14 +40,43 @@ body {
 	font-weight: bold;
 	margin-top: 50px;
 }
+.spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 50px;
+  height: 50px;
+  margin: -75px 0 0 -75px;
+  border: 16px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 16px solid #3498db;
+  -webkit-animation: spin 2s linear infinite;
+  animation: spin 2s linear infinite;
+}
+
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 -->
 </style>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-<script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAd7lDXsyY13jO9zRM5AiLWCbhqbrf5XCY"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>sudo apt-get install simplescreenrecorder
+
+<script src="http://spin.js.org/spin.min.js"></script>
+<script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyApfdSTgQNLa_gl-9PkD9L06Ze9PmZrLBo"></script>
+<script src="https://cdn.rawgit.com/googlemaps/v3-utility-library/infobox/1.1.13/src/infobox.js
+"></script>
 <script type="text/javascript">
     var southampton = new google.maps.LatLng(50.924354,-1.405391);
 	var map;
 	var M;
+    var useDistances;
 	var jams = [];
 	var cars = [];
 	var radius = [];
@@ -57,6 +86,9 @@ body {
 	var score;
 	var round;
 	var allAssigned;
+    var averageDistance;
+    var bestPossibleTime;
+    var totalDistance;
 	var splashPanel;
 	var jamJSON;
 	var carJSON;
@@ -97,8 +129,43 @@ body {
 				new google.maps.LatLng(50.9149906,-1.4145485),
 				new google.maps.LatLng(50.9338139,-1.4182561)],
 				[]];
+    // Loading spinner
+    var opts = {
+        lines: 15 // The number of lines to draw
+        , length: 9 // The length of each line
+        , width: 11 // The line thickness
+        , radius: 37 // The radius of the inner circle
+        , scale: 1 // Scales overall size of the spinner
+        , corners: 1 // Corner roundness (0..1)
+        , color: '#000' // #rgb or #rrggbb or array of colors
+        , opacity: 0.25 // Opacity of the lines
+        , rotate: 42 // The rotation offset
+        , direction: 1 // 1: clockwise, -1: counterclockwise
+        , speed: 0.8 // Rounds per second
+        , trail: 60 // Afterglow percentage
+        , fps: 20 // Frames per second when using setTimeout() as a fallback for CSS
+        , zIndex: 2e9 // The z-index (defaults to 2000000000)
+        , className: 'spinner' // The CSS class to assign to the spinner
+        , top: '50%' // Top position relative to parent
+        , left: '50%' // Left position relative to parent
+        , shadow: false // Whether to render a shadow
+        , hwaccel: false // Whether to use hardware acceleration
+        , position: 'absolute' // Element positioning
+        }
+    var spinner = null;
+    var spinner_div = 0;
+
+	//own comparing function for genetic algorithm
+	function compare(a,b) {
+		if (a.fitness < b.fitness)
+			return 1;
+		if (a.fitness > b.fitness)
+			return -1;
+		return 0;
+	}
 	
 	function initialize(){
+        document.getElementById('spinner').style.visibility = "hidden";
 		map = new google.maps.Map(document.getElementById("map-canvas"),{
 			center: southampton,
 			zoom:13,
@@ -152,6 +219,10 @@ body {
 		//add splash panel
 		map.controls[google.maps.ControlPosition.CENTER].push(splashPanel);
 	}
+    
+    window.onerror = function(msg, url, linenumber) {
+        alert('Something went wrong, please refresh your screen. \n Error message: '+msg+'\nURL: '+url+'\nLine Number: '+linenumber);
+    }
 	
 	function createSplashPanel() {
 		splashPanel = document.createElement('div');
@@ -166,7 +237,7 @@ body {
 		score.style.textAlign = 'center';
 		splashPanel.appendChild(score);
 		var desciptionText = document.createElement('div');
-		desciptionText.innerHTML = '<p align="center" style="font-size: 18px">In this game, you play the role of an attacker of a smart traffic control system. You have infiltrated the system to the point where you have the ability to flag fake traffic jams at locations of your choice to influence the flow of traffic.</p> <p align="center" style="font-size: 18px">You also know the location of a select number of police cars and all of the real traffic jams.</p> <p align="center" style="font-size: 18px">You can place fake traffic jams anywhere within the bounding black box on the map. The police cars will then have 30 seconds to check as many traffic jams as they <img src="./radius.png" width="243" height="152" style="float: right;margin-left: 10px;margin-top: 10px;" /> can, the longer your fake jams go unchecked the more influence they have which scores more points. The closer a police car gets to a real traffic jam the slower it will move. However, the closer you place a fake traffic jam to a real one the less points it will score. To see a guide on this range simply mouse over the traffic jam of interest (an example is in the picture on the right). Scores will also be panelised if the fake jams are too close together or too far apart.</p> <p align="center" style="font-size: 18px">If the police cars manage to check <u><strong>ALL</strong></u> of the fake jams then you lose the game. </p> <p align="center" style="font-size: 18px">There are 5 rounds to the whole game which have increasing difficulty. Your score across these rounds is cumulative and you will have a chance to see how you compare to others by adding this to the leader board.&nbsp;<strong>Your aim is to maximise your influence over the traffic and therefore your score over all the rounds you play.&nbsp;</strong></p> <p align="center" style="font-size: 18px">At the bottom of the screen, you will be able to see how much time is left in the current round of the game.</p>';
+		desciptionText.innerHTML = '<p align="center" style="font-size: 18px">In this game, you play the role of an attacker of a smart traffic control system. You have infiltrated the system to the point where you have the ability to flag fake traffic jams at locations of your choice to influence the flow of traffic.</p> <p align="center" style="font-size: 18px">You also know the location of a select number of police cars and all of the real traffic jams.</p> <p align="center" style="font-size: 18px">You can place fake traffic jams anywhere within the bounding black box on the map. The police cars will then have 30 seconds to check as many traffic jams as they <img src="./radius.png" width="243" height="152" style="float: right;margin-left: 10px;margin-top: 10px;" /> can, the longer your fake jams go unchecked the more influence they have which scores more points. The closer a police car gets to a real traffic jam the slower it will move. However, the closer you place a fake traffic jam to a real one the less points it will score. To see a guide on this range simply mouse over the traffic jam of interest (an example is in the picture on the right). Scores will also be panelised if the fake jams are too close together or too far apart.</p> <p align="center" style="font-size: 18px">If the police cars manage to check <u><strong>ALL</strong></u> of the fake jams then you lose the game. </p> <p align="center" style="font-size: 18px">There are 5 rounds to the whole game which have increasing difficulty. Your score across these rounds is cumulative and you will have a chance to see how you compare to others by adding this to the leader board.&nbsp;<strong>Your aim is to maximise your influence over the traffic and therefore your score over all the rounds you play.&nbsp;</strong></p> <p align="center" style="font-size: 18px">At the bottom of the screen, you will be able to see how much time is left in the current round of the game. Version 1.1</p>'; //added Version 1.1 to see if herocu updates
 		desciptionText.style.marginRight = "50px";
 		desciptionText.style.marginLeft = "50px";
 		var MDefineText = document.createElement('div');
@@ -175,6 +246,13 @@ body {
 		MDefineText.innerHTML = 'Number of police cars and fake traffic jams:  ';
 		MComboBox = document.createElement('select');
 		MComboBox.innerHTML = '<option value=1>1</option><option value=2>2</option><option value=3>3</option><option value=4>4</option><option value=5>5</option>';
+        var checkboxText = document.createElement('div');
+        checkboxText.innerHTML = 'Use car time travel as distances (adds delay):';
+        checkboxText.style.fontFamily='Arial,sans-serif';
+		checkboxText.style.fontSize='18px';
+        var useDistancesCheckbox = document.createElement('input');
+        useDistancesCheckbox.type = 'checkbox';
+        useDistancesCheckbox.checked = true;
 		var playButton = document.createElement('button');
 		playButton.style.fontFamily='Arial,sans-serif';
 		playButton.style.cursor = 'pointer';
@@ -189,11 +267,14 @@ body {
 		score.appendChild(desciptionText);
 		MDefineText.appendChild(MComboBox);
 		score.appendChild(MDefineText);
+        checkboxText.appendChild(useDistancesCheckbox);
+        score.appendChild(checkboxText);
 		score.appendChild(playButton);
 		score.appendChild(leaderButton);
-
+        
 		//click listener for the play button
 		google.maps.event.addDomListener(playButton, 'click', function() {
+            useDistances = useDistancesCheckbox.checked;
 			M = MComboBox.options[MComboBox.selectedIndex].value;
 			resetVariables();
 			startRound(round);
@@ -291,7 +372,7 @@ body {
 	
 	//Represents the actions taken place after clicking the go button
 	function button(){
-		if(grey === false){
+		if(grey == false){
 			if(fakeJamCount<M){
 				alert("Please select " + M + " place(s) for a traffic jam to occur. (" + fakeJamCount + " already selected)");
 			}else{
@@ -315,13 +396,23 @@ body {
 						M = temp;
 						alert("Please wait for " + M + " police cars to be placed on the map and try again.");
 					}else{
-						startCountdown();			
+                        document.getElementById('goButton').style.color = '#CCCCCC';
+                        document.getElementById('goButton').style.backgroundColor = '#999999';
+                        grey = true;
+                        document.getElementById('spinner').style.visibility = "visible";
+                        if (useDistances == false){
+                            getSimpleDistances();
+                        }
+                        else{
+                            //get distances between jams
+                            getCarDistances();
+                        }
 					}
 				}
 			}
 		}
-	}
-	
+	}    
+    
 	//Moves a car along its path at the correct speed
 	function advance(car){
 		if(car.assignTime < 10){
@@ -361,26 +452,15 @@ body {
 		car.jamsChecked++;
 		document.getElementById('checked').innerHTML = 'JAMS CHECKED: ' + (parseInt(document.getElementById('checked').innerHTML.substring(14,16))+1) + '/' + jams.length;
 	}
-	
-	//Assigns a new traffic jam to car while waiting for aTime time
+    
+    //Assigns a new traffic jam to car while waiting for aTime time
 	function assign(car, aTime){
 		car.assignTime = aTime;
-		var closest;
-		var closestDistance = Infinity;
-		for(var o = 0; o<jams.length; o++){
-			if(jams[o].checked === false && jams[o].assigned === allAssigned){
-				var dist = Math.sqrt(Math.pow(car.position.lat()-jams[o].getCenter().lat(), 2)+Math.pow(car.position.lng()-jams[o].getCenter().lng(), 2));
-				if(dist < closestDistance){
-					closest = jams[o];
-					closestDistance = dist;
-				}
-			}
-		}
-		if(closest !== undefined){
+		if(car.jams.length > 0){
 			if(car.target !== undefined){
-				car.target.assigned = false;			
+				car.targetassigned = false;			
 			}
-			car.target = closest;
+            car.target = car.jams[0];
 			directionsService.route({
 					origin:car.getPosition(),
 					destination:car.target.getCenter(),
@@ -388,14 +468,509 @@ body {
 				}, function(result, status) {
 					if (status == google.maps.DirectionsStatus.OK) {
 						car.path = result.routes[0].overview_path;
+                        car.jams.shift();
 						car.pointOnPath = 0;
 						car.wait = 0;
-						car.target.assigned = true;
+						car.targetassigned = true;
 					}
 				}
 			);
 		}
 	}
+    
+/**********************************
+*         Simple Distances        *
+***********************************/
+    
+    function getSimpleDistances(){
+        //creating nested map for saving directions, first key is starting point, second is endpoint and value of second is time in seconds that is expected to take car to get there
+        console.log("Getting simple distances calculated from geographic position.");
+		jamsDistances= new Map();
+		carsDistances = [];
+        jams.counter = 0;
+		for (var i = 0; i < jams.length; i++) {
+			jamsDistances.set(jams[i].text.content, new Map());
+		}
+
+		for (var i =0; i < cars.length; i++) {
+			carsDistances.push(new Map());
+		}
+        
+        for (var i =0; i < cars.length; i++) {
+            for (var j=0; j<jams.length; j++){
+                carsDistances[i].set(jams[j].text.content, Math.sqrt(Math.pow(cars[i].position.lat()-jams[j].getCenter().lat(), 2)+Math.pow(cars[i].position.lng()-jams[j].getCenter().lng(), 2)));
+            }
+        }
+        
+        for (var i =0; i < (jams.length-1); i++) {
+            for (var j=(i+1); j<jams.length; j++){
+                jamsDistances.get(jams[i].text.content).set(jams[j].text.content, Math.sqrt(Math.pow(jams[i].getCenter().lat()-jams[j].getCenter().lat(), 2)+Math.pow(jams[i].getCenter().lng()-jams[j].getCenter().lng(), 2)));
+              jamsDistances.get(jams[j].text.content).set(jams[i].text.content, Math.sqrt(Math.pow(jams[i].getCenter().lat()-jams[j].getCenter().lat(), 2)+Math.pow(jams[i].getCenter().lng()-jams[j].getCenter().lng(), 2)));
+            }
+        }
+        
+        console.log("Car distances");
+        console.log(carsDistances);
+        console.log("Jams distances");
+        console.log(jamsDistances);
+        
+        PSOalgorithm(40, 50);
+        
+    }
+    
+/**********************************
+*      Time travel distances      *
+***********************************/
+    
+    //this function starts preparation for genetic algorithm, it firstly creates map for storing distances and then get's and saves cars distances
+    function getCarDistances(){
+
+        //creating nested map for saving directions, first key is starting point, second is endpoint and value of second is time in seconds that is expected to take car to get there
+		jamsDistances= new Map();
+		cars.positions = [];
+		carsDistances = [];
+		var coordinates = [];
+        jams.counter = 0;
+		for (var i = 0; i < jams.length; i++) {
+			jamsDistances.set(jams[i].text.content, new Map());
+			coordinates.push(jams[i].getCenter());
+		}
+
+		for (var i =0; i < cars.length; i++) {
+			cars.positions.push(cars[i].position);
+			carsDistances.push(new Map());
+		}
+        
+        var distanceService = new google.maps.DistanceMatrixService();
+
+        distanceService.getDistanceMatrix({
+            origins: cars.positions,
+            destinations: coordinates,
+            unitSystem: google.maps.UnitSystem.METRIC,
+            travelMode: google.maps.TravelMode.DRIVING,
+            durationInTraffic: true
+        },
+        function (response, status) {
+            if (status !== google.maps.DistanceMatrixStatus.OK) {
+                alert('Error: OVER_QUERY_LIMIT - you used your limit for google maps distances. Try it later.');
+            } else {
+                console.log("inside car matrix");
+	        	for (var i =0; i < cars.length; i++) {
+	        		for (var j=0; j<jams.length; j++){
+		            	carsDistances[i].set(jams[j].text.content, response.rows[i].elements[j].duration.value);
+		            }
+	        	}
+	        	console.log(carsDistances);
+                setTimeout(function() {
+                    getJamsDistances(coordinates);
+                }, 1750);                
+            }
+        });
+    }
+    
+    function getJamsDistances(coordinates){
+		console.log(jams.counter);
+		var distanceService = new google.maps.DistanceMatrixService();
+
+
+		distanceService.getDistanceMatrix({
+	        origins: [jams[jams.counter].getCenter()],
+	        destinations: coordinates,
+	        unitSystem: google.maps.UnitSystem.METRIC,
+	        travelMode: google.maps.TravelMode.DRIVING,
+	        durationInTraffic: true
+	    },
+	    function (response, status) {
+	        if (status !== google.maps.DistanceMatrixStatus.OK) {
+	            alert('Error: OVER_QUERY_LIMIT - you used your limit for google maps distances. Try it later.');
+	        } else {
+	        	coordinates.shift();
+	        	console.log(jamsDistances.get(jams[jams.counter].text.content));
+	            for (var j=1; j<(jams.length-jams.counter); j++){
+	            	jamsDistances.get(jams[jams.counter].text.content).set(jams[(j+jams.counter)].text.content, response.rows[0].elements[j].duration.value);
+	            	jamsDistances.get(jams[(j+jams.counter)].text.content).set(jams[jams.counter].text.content, response.rows[0].elements[j].duration.value);
+	            }
+	            jams.counter++;
+                if(coordinates.length>0){
+                    setTimeout(function() {
+                        getJamsDistances(coordinates);
+                    }, (coordinates.length*100));
+                }else{
+                    console.log("finish");
+                    console.log(jamsDistances);
+                    //first is number of particles and second number of iterations
+                    PSOalgorithm(40, 50);
+                }
+	        }
+	    });
+    }
+                                          
+/**********************************
+*    Paricle swarm optimization   *
+***********************************/
+    
+	function PSOalgorithm(populationSize, numberOfIterations){
+        
+        getAverage();
+        console.log(carsDistances);
+        console.log(jamsDistances);
+
+		var particles = [];
+
+		//create group of random particles
+		for(var p = 0; p< populationSize; p++){
+            var randParticle = randomAssign();
+			
+            var particle = {
+                carAssign : randParticle.carAssign,
+                fitness : randParticle.fitness,
+                pBest : randParticle.carAssign,
+                pBestFitness : randParticle.fitness,
+                velocity : []
+            };
+            particles.push(particle);            
+		}
+		console.table(particles);
+
+        gBest = getBest(particles);
+        
+		for(var g = 0; g < numberOfIterations; g++){
+            
+            var gBestCounter = 0;
+            
+			particles.forEach(function(x){
+                                
+                //follow the leader
+                if(Math.random()>0.40){
+                    followTheLeader(x);
+                }
+                // explore near solutions
+                else if(Math.random()>0.25){
+                    console.log("Old fitness before random exploring: "+x.fitness);
+                    exploreSolutions(x);
+                    console.log("New fitness random after: "+x.fitness);
+                }
+                // create new random particle
+                else{
+                    console.log("Creating new random particle");
+                    var randomParticle = randomAssign();
+                    
+                    x.carAssign = randomParticle.carAssign;
+                    x.fitness = randomParticle.fitness;
+                }
+                
+                //leaders needs to look for new solutions
+                if(x.fitness==gBest.fitness){
+                    gBestCounter++;
+                    console.log("Best fitness before exploring: "+x.fitness);
+                    exploreSolutions(x);
+                    console.log("New fitness after: "+x.fitness);
+                }
+                
+                // checking if new personal or global best
+                if(x.fitness<x.pBestFitness){
+                    x.pBestFitness = x.fitness;
+                    x.pBest = [];
+                    for(var n=0;n<x.carAssign.length;n++){
+                        var car = {jams:x.carAssign[n].jams.slice()}
+                        x.pBest.push(car);
+                    }
+                    if(x.pBestFitness<gBest.fitness){                        
+                        gBest.fitness = x.pBestFitness;
+                        gBest.carAssign = x.pBest;
+                    }
+                    
+                }
+                console.log("Fitness of "+g+"th evolution "+particles.indexOf(x)+"th particle = "+x.fitness);
+                for(var n = 0; n<x.carAssign.length; n++){
+                    var message = "Car "+(n+1)+" has these jams assigned: ";
+                    for(var i = 0; i< x.carAssign[n].jams.length; i++){
+                        message += x.carAssign[n].jams[i].text.content+", ";
+                    }
+                    console.log(message);
+                }
+                console.log("-");
+			});
+            console.log("---------------------------------------------------");
+            console.log("---------------------------------------------------");
+            console.log("---------------------------------------------------");
+            console.log("Best time of "+g+"th iteration: "+gBest.fitness);
+            console.log(gBest.carAssign);
+            for(var n = 0; n<M; n++){
+                var message = "Best car "+(n+1)+" has these jams assigned: ";
+                for(var i = 0; i< gBest.carAssign[n].jams.length; i++){
+                    message += gBest.carAssign[n].jams[i].text.content+", ";
+                }
+                console.log(message);
+            }
+            
+            if(gBestCounter<2 && particles.length>10){
+                particles[0].carAssign = [];
+                particles[1].carAssign = [];
+                for(var n=0;n<gBest.carAssign.length;n++){
+                    var car = {jams:gBest.carAssign[n].jams.slice()}
+                    particles[0].carAssign.push(car);
+                    particles[1].carAssign.push(car);
+                }
+                particles[0].fitness = gBest.fitness;
+                particles[1].fitness = gBest.fitness;
+            }
+		}
+        
+        console.log("Calculated time with average distance = "+bestPossibleTime);
+        document.getElementById('spinner').style.visibility = "hidden";
+        
+        for(var m=0;m<M;m++){
+            cars[m].jams = gBest.carAssign[m].jams;
+        }
+        
+        startCountdown();
+
+	}
+    
+/**********************************
+*          Main functions         *
+***********************************/
+    
+    function followTheLeader(x){
+        //get velocity and force
+        for(var m=0;m<M;m++){
+            x.velocity = [];
+            for(var j=0;j<x.pBest[m].jams.length;j++){
+                if(x.carAssign[m].jams.length <= j){
+                    swap = [m, j, false, x.pBest[m].jams[j]];
+                    x.velocity.push(swap);
+                }else if(x.carAssign[m].jams[j]!=x.pBest[m].jams[j]){
+                    swap = [m, j, true, x.carAssign[m].jams[j], x.pBest[m].jams[j]];
+                    x.velocity.push(swap);
+                }
+            }
+            for(var j=0;j<gBest.carAssign[m].jams.length;j++){
+                if(x.carAssign[m].jams.length <= j){
+                    swap = [m, j, false, gBest.carAssign[m].jams[j]];
+                    x.velocity.push(swap);
+                }else if(x.carAssign[m].jams[j]!=gBest.carAssign[m].jams[j]){
+                    swap = [m, j, true, gBest.carAssign[m].jams[j]];
+                    x.velocity.push(swap);
+                }
+            }
+        }
+        //move towards personal and global best
+        for(var swap=0;swap<x.velocity.length;swap++){
+
+            if(Math.random()>0.5){
+                var index = [];
+                for(var m=0;m<x.carAssign.length;m++){
+                    var ind = x.carAssign[m].jams.indexOf(x.velocity[swap][3]);
+                    if(ind>=0){
+                        index = [m, ind];
+                    }
+                }
+
+                if(x.velocity[swap][2]==false){
+                    x.carAssign[index[0]].jams.splice(index[1], 1);
+                    x.carAssign[x.velocity[swap][0]].jams.splice(x.velocity[swap][1],0,x.velocity[swap][3]);
+                }else{
+                    x.carAssign[index[0]].jams[index[1]] = x.carAssign[x.velocity[swap][0]].jams[x.velocity[swap][1]];
+                    x.carAssign[x.velocity[swap][0]].jams[x.velocity[swap][1]]=x.velocity[swap][3];
+                }
+            }
+        }
+    x.fitness = calculateFitness(x.carAssign);
+    }
+    
+    //this would be used by leaders of swarm to find new solutions
+    function exploreSolutions(particle){
+        
+        //try to optimize one of the cars assigment
+        while(Math.random()>(0.45-(M*0.03))){
+            console.log("optimizing car assigment");
+            var carN = Math.floor(Math.random() * M);
+            //This solution is calculating fitness of all assign, I was thinking about calculating just the change but it got too complicated and messy
+            for(var y=0;y<(particle.carAssign[carN].jams.length-1);y++){
+                var bestFitness = calculateCarFitness(particle.carAssign)[carN];
+                var bestZ= null;
+                for(var z=(y+1);z<particle.carAssign[carN].jams.length;z++){
+                    var car = [];
+                    for(var jc=0;jc<particle.carAssign.length;jc++){
+                        var newCar = {jams:particle.carAssign[jc].jams.slice()};
+                        car.push(newCar);
+                    }
+                    var jam = car[carN].jams[y];
+                    car[carN].jams[y] = car[carN].jams[z];
+                    car[carN].jams[z] = jam;
+                    var carFitness = calculateCarFitness(car)[carN];
+                    if(carFitness<bestFitness){
+                        bestZ=z;
+                        console.log("this is better than previous solutions"+particle.carAssign[carN].jams[z].text.content);
+                        bestFitness = carFitness;
+                    }
+                }
+                if(bestZ!=null){
+                    var particleJam = particle.carAssign[carN].jams[y];
+                    particle.carAssign[carN].jams[y] = particle.carAssign[carN].jams[bestZ];
+                    particle.carAssign[carN].jams[bestZ] = particleJam;
+                    particle.fitness = calculateFitness(particle.carAssign); 
+                }
+            }
+        }
+        // Balance different cars
+        while(M>1 && Math.random()>(0.55-(M*0.03))){
+            console.log("Balancing cars");
+            var distances = calculateCarFitness(particle.carAssign);
+            var carAverage = 0;
+            for(var i=0;i<distances.length;i++){
+                carAverage+=distances[i];
+            }
+            carAverage = carAverage/distances.length;
+            console.log("average distance is: "+carAverage);
+            var smaller = [];
+            var longest = 0;
+            var long = 0;
+            for (var i=0;i<distances.length;i++){
+                if(distances[i]>carAverage){
+                    if(distances[i]>longest){
+                        longest = distances[i];
+                        long = i;
+                    }
+                }else{
+                    smaller.push(i);
+                }
+            }
+
+            var small = smaller[Math.floor(Math.random() * smaller.length)];
+
+            var best = [0, 0, particle.fitness];
+            var bestFitness = particle.fitness;
+            for(var y=0;y<particle.carAssign[long].jams.length;y++){
+                for(var x=0;x<particle.carAssign[small].jams.length;x++){
+                    var carBalance = [];
+                    for(var jc=0;jc<particle.carAssign.length;jc++){
+                        var car = {jams:particle.carAssign[jc].jams.slice()};
+                        carBalance.push(car);
+                    }
+                    var jam = carBalance[long].jams[y];
+                    carBalance[long].jams.splice(y, 1);
+                    carBalance[small].jams.splice(x, 0, jam);
+                    var carFitness = calculateFitness(carBalance);
+                    if(carFitness<bestFitness && Math.random()>0.95){
+                        console.log(carBalance);
+                        console.log("Fitness before balancing: "+particle.fitness+" and after : "+ carFitness);
+                        var jam = particle.carAssign[long].jams[y];
+                        particle.carAssign[long].jams.splice(y, 1);
+                        particle.carAssign[small].jams.splice(x, 0, jam);
+                        particle.fitness = carFitness;
+                        bestFitness = carFitness;
+                        return;
+                    }else if(carFitness<best[2]){
+                        best=[x, y, carFitness];
+                        bestFitness = carFitness;
+                    }
+                }
+            }
+            if(best[2]<particle.fitness){
+                console.log("Fitness before balancing: "+particle.fitness+" and after: "+ best[2]);
+                var jam = particle.carAssign[long].jams[best[1]];
+                particle.carAssign[long].jams.splice(best[1], 1);
+                particle.carAssign[small].jams.splice(best[0], 0, jam);
+                particle.fitness = best[2];
+            }else{
+                return;
+            }
+        }        
+    }
+    
+    function randomAssign(){
+		var randCars = [];
+		for(var c = 0; c<M; c++){
+			randCars.push(obj = {jams : []});
+				
+		}
+		for(var j = 0; j<jams.length; j++){
+			var car = randCars[Math.floor(Math.random() * M)];
+			var jamNum = Math.floor(Math.random() * car.jams.length);
+			car.jams.splice(jamNum, 0, jams[j]);
+		}
+
+		var individual = {
+			carAssign : [],
+			fitness : 0
+		};
+
+        individual.carAssign = randCars.slice();
+		individual.fitness = calculateFitness(randCars);
+		return individual;
+	}
+/**********************************
+*        Helper functions         *
+***********************************/
+    
+    //calculate fitness of cars - longest time distance
+    function calculateFitness(allCars){
+        var distances = calculateCarFitness(allCars);
+		var longestDistance = 0;
+		for(var n = 0; n<allCars.length; n++){
+			if(distances[n]>longestDistance){
+				longestDistance = distances[n];
+			}
+		}
+		return longestDistance;
+	}
+    
+    function calculateCarFitness(multipleCars){
+        var distances = [];
+        for(var n = 0; n<multipleCars.length; n++){
+			var singleCar = multipleCars[n];
+            if(singleCar.jams.length<1){
+                continue;
+            }
+
+            var carDist = carsDistances[n].get(singleCar.jams[0].text.content);
+			for(var i = 1; i<singleCar.jams.length; i++){
+				carDist += jamsDistances.get(singleCar.jams[i-1].text.content).get(singleCar.jams[i].text.content);
+            }
+            distances.push(carDist);
+		}
+        
+        return distances;
+    }
+    
+    function getBest(particles){
+        var best = {
+			carAssign : particles[0].pBest,
+			fitness : particles[0].pBestFitness
+		};
+        for(var i=1;i<particles.length;i++){
+            if(best.fitness<particles[i].pBestFitness){
+                best = {
+                    carAssign : particles[i].pBest,
+                    fitness : particles[i].pBestFitness
+                };
+            }
+        }
+        return best;
+    }
+    
+    //gets average distance between jams
+    function getAverage(){
+        total = 0;
+        for (var i = 0; i < jams.length; i++) {
+			for (var j =0; j < jams.length; j++){
+                if(j==i){
+                    continue;
+                }
+                total+= jamsDistances.get(jams[i].text.content).get(jams[j].text.content);
+            }
+		}
+        averageDistance = total / (jams.length*jams.length);
+        bestPossibleTime = averageDistance * jams.length;
+        console.log("Average distance is "+averageDistance);
+    }
+    
+/**********************************
+*    End of helping functions     *
+***********************************/    
+
 	
 	//Returns if the state of the current game is a loss or not, this is determined by all fake jams being checked
 	function checkIfLost(){
@@ -454,6 +1029,7 @@ body {
 		for(var p = 0; p<M; p++){
 			assign(cars[p], 0);
 		}
+
 		timer = setInterval(function(){
 			sof = spreadOfFakes();
 			calculateScore();	
@@ -497,7 +1073,33 @@ body {
 
 	//Places a fake jam at location
 	function placeFakeJam(location) {
-		if(fakeJamCount < M){
+        if(fakeJamCount < M){
+            //checks if there is any trafic jam
+            if(jams.length<1){
+                var name = "a";						//if not sets a as its name
+            }else{
+                var name = String.fromCharCode(jams[jams.length-1].text.content.charCodeAt()+1)		//if yes sets next character as its name
+            }
+            var myOptions = {
+                content: name,
+                boxStyle: {
+                  border: "none",
+                  textAlign: "center",
+                  fontSize: "10pt",
+                  width: "50px"
+                },
+                disableAutoPan: true,
+                pixelOffset: new google.maps.Size(-25, -5),
+                position: location,
+                closeBoxURL: "",
+                isHidden: false,
+                pane: "floatPane",
+                enableEventPropagation: true
+            };
+
+            var ibLabel = new InfoBox(myOptions);
+            ibLabel.open(map);
+            
 			var circle = new google.maps.Circle({
 				center:location,
 				draggable:true,
@@ -514,6 +1116,8 @@ body {
 			circle.checked = false;
 			circle.assigned = false;
 			circle.influence = 0;
+			circle.text = myOptions;
+            circle.label  = ibLabel;
 			jams.push(circle);
 		}
 		document.getElementById('toplace').innerHTML = 'LEFT TO PLACE: ' + (M - fakeJamCount);
@@ -532,7 +1136,8 @@ body {
 	//Clears all jams from the map
 	function clearJams(){
 		for (var i = 0; i < jams.length; i++) {
-          jams[i].setMap(null);
+            jams[i].setMap(null);
+            jams[i].label.close();
         }
 	}
 	
@@ -563,8 +1168,16 @@ body {
 		car.fakeJamsChecked = 0;
 		car.jamsChecked = 0;
 		car.startPosition = car.position;
+		car.jams = [];
+		car.waypoints = [];
+		car.totalDistance = 0;
 		cars.push(car);
 	}
+    
+    function carAddJam(n, jam){
+        cars[n].jams.append(jam)
+        cars[n].totalDistance += carsDistances[n].get(jam.text.content); 
+    }
 	
 	//Relocates car to position
 	function moveCar(car, position){
@@ -586,6 +1199,32 @@ body {
 	
 	//Adds a real traffic jam to the map
 	function placeRealJam(location){
+		//checks if there is any trafic jam
+		if(jams.length<1){
+			var name = "a";						//if not sets a as its name
+		}else{
+			var name = String.fromCharCode(jams[jams.length-1].text.content.charCodeAt()+1)		//if yes sets next character as its name
+		}
+		var myOptions = {
+		    content: name,
+		    boxStyle: {
+		      border: "none",
+		      textAlign: "center",
+		      fontSize: "10pt",
+		      width: "50px"
+		    },
+		    disableAutoPan: true,
+		    pixelOffset: new google.maps.Size(-25, -5),
+		    position: location,
+		    closeBoxURL: "",
+		    isHidden: false,
+		    pane: "floatPane",
+		    enableEventPropagation: true
+		};
+
+		var ibLabel = new InfoBox(myOptions);
+		ibLabel.open(map);
+
 		var circle = new google.maps.Circle({
 			center:location,
 			draggable:false,
@@ -600,6 +1239,9 @@ body {
 		circle.real = true;
 		circle.checked = false;
 		circle.assigned = false;
+		circle.text = myOptions;
+        circle.label  = ibLabel;
+
 		google.maps.event.addListener(circle, 'mouseover', function() {placeRadius(circle.center, 5);});
 		jams.push(circle);
 	}
@@ -651,7 +1293,7 @@ body {
 			}, function(result, status) {
 				if (status == google.maps.DirectionsStatus.OK) {
 					placeCar(new google.maps.LatLng(result.routes[0].legs[0].start_location.lat(), result.routes[0].legs[0].start_location.lng()));
-				}else{
+				}else{s
 					alert("Error: Google Maps API not returning location data. The game will restart.");
 					window.location = "./";
 				}
@@ -714,5 +1356,6 @@ body {
         		<h1>Go</h1>
         </button>
 	</div>
+    <div id='spinner' class='spinner'></div>
 </body>
 </html>
